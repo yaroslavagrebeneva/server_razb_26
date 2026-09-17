@@ -1,0 +1,1225 @@
+openapi: 3.0.3
+
+info:
+  title: CheckIn API
+  description: |
+    REST API цифровой системы учета посещаемости CheckIn.
+    Система предназначена для студентов, старост, преподавателей,
+    кураторов и декана.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Локальный сервер разработки
+
+tags:
+  - name: Auth
+    description: Авторизация и регистрация
+  - name: Users
+    description: Пользователь
+  - name: Lessons
+    description: Занятия и посещаемость
+  - name: QR Sessions
+    description: QR-сессии
+  - name: Attendance
+    description: Посещаемость
+  - name: Explanations
+    description: Объяснения отсутствия
+  - name: Notifications
+    description: Уведомления
+  - name: Reports
+    description: Отчёты
+
+paths:
+
+  /api/v1/auth/login:
+    post:
+      summary: Вход в систему
+      description: Проверяет учетные данные пользователя и возвращает JWT-токен.
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Неверный логин или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Ошибка валидации данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/register:
+    post:
+      summary: Регистрация пользователя
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Пользователь успешно зарегистрирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Ошибка валидации данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Пользователь уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/users/me:
+    get:
+      summary: Получить профиль текущего пользователя
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Профиль пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/lessons:
+    get:
+      summary: Получить список занятий
+      tags:
+        - Lessons
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: group_id
+          in: query
+          required: false
+          description: Фильтр по учебной группе
+          schema:
+            type: string
+            format: uuid
+        - name: date_from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Список занятий
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Lesson'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Создать занятие
+      tags:
+        - Lessons
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLessonRequest'
+      responses:
+        '201':
+          description: Занятие успешно создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lesson'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Доступ разрешён только преподавателю
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/lessons/{lessonId}/qr-sessions:
+    post:
+      summary: Создать QR-сессию занятия
+      description: Преподаватель запускает QR-сессию для отметки студентов.
+      tags:
+        - QR Sessions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LessonId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQrSessionRequest'
+      responses:
+        '201':
+          description: QR-сессия успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QrSession'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Доступ разрешён только преподавателю
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Занятие не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr-sessions/{sessionId}/check-in:
+    post:
+      summary: Отметиться через QR-код
+      description: Студент отправляет код QR-сессии и получает отметку о присутствии.
+      tags:
+        - QR Sessions
+        - Attendance
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QrCheckInRequest'
+      responses:
+        '201':
+          description: Посещаемость успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attendance'
+        '400':
+          description: QR-сессия недействительна или завершена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Доступ разрешён только студенту
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Студент уже отмечен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/lessons/{lessonId}/attendance:
+    get:
+      summary: Получить посещаемость занятия
+      tags:
+        - Attendance
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LessonId'
+      responses:
+        '200':
+          description: Список записей посещаемости
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Attendance'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Недостаточно прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Занятие не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Ручная отметка посещаемости
+      description: |
+        Староста может отметить студента вручную, если QR-код невозможно
+        использовать или студент пришёл позднее. Поле marked_by позволяет
+        определить пользователя, который установил отметку.
+      tags:
+        - Attendance
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LessonId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualAttendanceRequest'
+      responses:
+        '201':
+          description: Ручная отметка успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attendance'
+        '400':
+          description: Некорректные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Доступ разрешён старосте
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Занятие или студент не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/attendance/{attendanceId}:
+    patch:
+      summary: Изменить запись посещаемости
+      description: Преподаватель или староста может скорректировать запись.
+      tags:
+        - Attendance
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AttendanceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAttendanceRequest'
+      responses:
+        '200':
+          description: Запись успешно изменена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attendance'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Недостаточно прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Запись не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/explanations:
+    get:
+      summary: Получить список объяснений
+      description: Преподаватель получает объяснения студентов для проверки.
+      tags:
+        - Explanations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ExplanationStatus'
+        - name: student_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список объяснений
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Explanation'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Доступ разрешён преподавателю
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Добавить объяснение отсутствия
+      tags:
+        - Explanations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExplanationRequest'
+      responses:
+        '201':
+          description: Объяснение успешно создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Explanation'
+        '400':
+          description: Некорректные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/explanations/{explanationId}:
+    patch:
+      summary: Проверить объяснение
+      description: Преподаватель принимает или отклоняет объяснение студента.
+      tags:
+        - Explanations
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ExplanationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewExplanationRequest'
+      responses:
+        '200':
+          description: Результат проверки сохранён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Explanation'
+        '400':
+          description: Некорректный статус проверки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Доступ разрешён преподавателю
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Объяснение не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications:
+    get:
+      summary: Получить уведомления
+      tags:
+        - Notifications
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список уведомлений
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/curator/attendance-alerts:
+    get:
+      summary: Получить предупреждения о низкой посещаемости
+      description: Куратор получает уведомления по закреплённым группам.
+      tags:
+        - Notifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: threshold
+          in: query
+          required: false
+          description: Порог посещаемости в процентах
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            maximum: 100
+            default: 70
+      responses:
+        '200':
+          description: Список предупреждений
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttendanceAlert'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Доступ разрешён куратору
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/reports/attendance:
+    get:
+      summary: Сформировать отчёт по посещаемости
+      description: Декан получает сводный отчёт по выбранным параметрам.
+      tags:
+        - Reports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: faculty_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: group_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: subject
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Сводный отчёт сформирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceReport'
+        '400':
+          description: Некорректные параметры отчёта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Доступ разрешён декану
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT токен пользователя.
+
+  parameters:
+    LessonId:
+      name: lessonId
+      in: path
+      required: true
+      description: UUID занятия
+      schema:
+        type: string
+        format: uuid
+
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      description: UUID QR-сессии
+      schema:
+        type: string
+        format: uuid
+
+    AttendanceId:
+      name: attendanceId
+      in: path
+      required: true
+      description: UUID записи посещаемости
+      schema:
+        type: string
+        format: uuid
+
+    ExplanationId:
+      name: explanationId
+      in: path
+      required: true
+      description: UUID объяснения
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+
+    Role:
+      type: string
+      enum:
+        - student
+        - starosta
+        - teacher
+        - curator
+        - dean
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: student@example.com
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: password123
+
+    RegisterRequest:
+      type: object
+      required:
+        - full_name
+        - email
+        - password
+        - role
+      properties:
+        full_name:
+          type: string
+          minLength: 2
+          example: Иванов Иван Иванович
+        email:
+          type: string
+          format: email
+          example: student@example.com
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: password123
+        role:
+          $ref: '#/components/schemas/Role'
+
+    TokenResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+      properties:
+        access_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        token_type:
+          type: string
+          example: bearer
+
+    User:
+      type: object
+      required:
+        - id
+        - full_name
+        - email
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        full_name:
+          type: string
+          example: Иванов Иван Иванович
+        email:
+          type: string
+          format: email
+          example: student@example.com
+        role:
+          $ref: '#/components/schemas/Role'
+        group_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    CreateLessonRequest:
+      type: object
+      required:
+        - subject
+        - group_id
+        - starts_at
+        - ends_at
+      properties:
+        subject:
+          type: string
+          example: Проектирование информационных систем
+        group_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+          example: '2026-09-17T09:00:00+03:00'
+        ends_at:
+          type: string
+          format: date-time
+          example: '2026-09-17T10:30:00+03:00'
+        room:
+          type: string
+          nullable: true
+          example: 301
+
+    Lesson:
+      type: object
+      required:
+        - id
+        - subject
+        - group_id
+        - teacher_id
+        - starts_at
+        - ends_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        subject:
+          type: string
+        group_id:
+          type: string
+          format: uuid
+        teacher_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        room:
+          type: string
+          nullable: true
+
+    CreateQrSessionRequest:
+      type: object
+      properties:
+        expires_in_seconds:
+          type: integer
+          minimum: 30
+          maximum: 3600
+          default: 300
+          example: 300
+
+    QrSession:
+      type: object
+      required:
+        - id
+        - lesson_id
+        - qr_token
+        - created_at
+        - expires_at
+        - active
+      properties:
+        id:
+          type: string
+          format: uuid
+        lesson_id:
+          type: string
+          format: uuid
+        qr_token:
+          type: string
+          example: CHECKIN-8F2D91A4
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+          example: true
+
+    QrCheckInRequest:
+      type: object
+      required:
+        - qr_token
+      properties:
+        qr_token:
+          type: string
+          minLength: 1
+          example: CHECKIN-8F2D91A4
+
+    AttendanceStatus:
+      type: string
+      enum:
+        - present
+        - late
+        - absent
+      example: present
+
+    AttendanceMethod:
+      type: string
+      enum:
+        - qr
+        - manual
+      example: qr
+
+    ManualAttendanceRequest:
+      type: object
+      required:
+        - student_id
+        - status
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/AttendanceStatus'
+        comment:
+          type: string
+          nullable: true
+          example: Студент пришёл после начала занятия
+
+    UpdateAttendanceRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/AttendanceStatus'
+        comment:
+          type: string
+          nullable: true
+
+    Attendance:
+      type: object
+      required:
+        - id
+        - lesson_id
+        - student_id
+        - status
+        - method
+        - marked_by
+        - marked_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        lesson_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/AttendanceStatus'
+        method:
+          $ref: '#/components/schemas/AttendanceMethod'
+        marked_by:
+          type: string
+          format: uuid
+          description: Пользователь, установивший отметку.
+        marked_at:
+          type: string
+          format: date-time
+        comment:
+          type: string
+          nullable: true
+
+    ExplanationStatus:
+      type: string
+      enum:
+        - pending
+        - accepted
+        - rejected
+
+    ExplanationReason:
+      type: string
+      enum:
+        - illness
+        - family_circumstances
+        - official_reason
+        - other
+
+    CreateExplanationRequest:
+      type: object
+      required:
+        - lesson_id
+        - reason
+        - description
+      properties:
+        lesson_id:
+          type: string
+          format: uuid
+        reason:
+          $ref: '#/components/schemas/ExplanationReason'
+        description:
+          type: string
+          minLength: 1
+          example: Отсутствовал по причине болезни.
+        file_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    ReviewExplanationRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - accepted
+            - rejected
+        comment:
+          type: string
+          nullable: true
+          example: Объяснение подтверждено.
+
+    Explanation:
+      type: object
+      required:
+        - id
+        - lesson_id
+        - student_id
+        - reason
+        - description
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        lesson_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        reason:
+          $ref: '#/components/schemas/ExplanationReason'
+        description:
+          type: string
+        file_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        status:
+          $ref: '#/components/schemas/ExplanationStatus'
+        review_comment:
+          type: string
+          nullable: true
+        reviewed_by:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    NotificationType:
+      type: string
+      enum:
+        - explanation_created
+        - explanation_reviewed
+        - low_attendance
+        - attendance_changed
+        - system
+
+    Notification:
+      type: object
+      required:
+        - id
+        - user_id
+        - type
+        - title
+        - message
+        - is_read
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        title:
+          type: string
+          example: Низкая посещаемость
+        message:
+          type: string
+          example: Посещаемость группы ниже установленного порога.
+        is_read:
+          type: boolean
+          example: false
+        created_at:
+          type: string
+          format: date-time
+
+    AttendanceAlert:
+      type: object
+      required:
+        - group_id
+        - attendance_percent
+        - threshold
+      properties:
+        group_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+          nullable: true
+        attendance_percent:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 62.5
+        threshold:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 70
+        message:
+          type: string
+          example: Посещаемость ниже установленного порога.
+
+    AttendanceReport:
+      type: object
+      required:
+        - period
+        - total_lessons
+        - total_attendance_records
+        - average_attendance_percent
+      properties:
+        period:
+          type: object
+          required:
+            - date_from
+            - date_to
+          properties:
+            date_from:
+              type: string
+              format: date
+            date_to:
+              type: string
+              format: date
+        total_lessons:
+          type: integer
+          minimum: 0
+          example: 48
+        total_attendance_records:
+          type: integer
+          minimum: 0
+          example: 1152
+        average_attendance_percent:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 87.4
+        groups:
+          type: array
+          items:
+            type: object
+            properties:
+              group_id:
+                type: string
+                format: uuid
+              attendance_percent:
+                type: number
+                format: float
+                minimum: 0
+                maximum: 100
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: validation_error
+        message:
+          type: string
+          example: Некорректные входные данные.
+        details:
+          type: object
+          additionalProperties: true
