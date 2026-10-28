@@ -249,3 +249,71 @@ CheckIn — веб-система для автоматизации учёта �
 
 Куратор получает уведомления о проблемах с посещаемостью закреплённых групп.
 
+
+---
+
+## 🚀 Запуск Backend Service
+
+### 🐳 В Docker (ЛР4)
+
+```bash
+# 1. Сборка образа
+docker build -t checkin-backend:latest .
+
+# 2. Запуск контейнера
+docker run --name backend-container -d -p 8080:8080 -e HTTP_PORT=8080 checkin-backend:latest
+
+# 3. Проверка
+curl http://localhost:8080/api/v1/health
+```
+
+Ответ:
+
+```json
+{ "status": "ok", "name": "CheckIn Backend Service", "version": "1.0.0", "uptime": 5 }
+```
+
+Swagger UI: <http://localhost:8080/docs>
+
+Остановка и удаление:
+
+```bash
+docker stop backend-container && docker rm backend-container
+```
+
+Подробный отчёт, разбор Dockerfile и ответы на контрольные вопросы — в [LAB4.md](LAB4.md).
+
+### 💻 Локально (без Docker)
+
+```bash
+python -m venv .venv
+# Linux / macOS
+source .venv/bin/activate
+# Windows
+.venv\Scripts\activate
+
+pip install -r requirements.txt
+cp .env.example .env      # Windows: copy .env.example .env
+python -m cmd.app
+```
+
+Сервис будет доступен на `http://127.0.0.1:8000/api/v1/health`.
+
+### ⚙️ Переменные окружения
+
+| Переменная | По умолчанию | Описание |
+|------------|--------------|----------|
+| `APP_NAME` | `CheckIn Backend Service` | Название сервиса |
+| `APP_VERSION` | `1.0.0` | Версия сервиса |
+| `HOST` | `127.0.0.1` (в Docker — `0.0.0.0`) | Адрес, на котором слушает сервер |
+| `HTTP_PORT` / `PORT` | `8000` (в Docker — `8080`) | Порт сервера |
+
+---
+
+## 📚 Лабораторные работы
+
+| № | Тема | Материалы |
+|---|------|-----------|
+| 2 | Проектирование REST API | [openapi.yaml](openapi.yaml), [ARCHITECTURE.md](ARCHITECTURE.md) |
+| 3 | Каркас приложения и эндпоинт здоровья | [`cmd/`](cmd), [`internal/`](internal) |
+| 4 | Контейнеризация с Docker | [Dockerfile](Dockerfile), [.dockerignore](.dockerignore), [LAB4.md](LAB4.md) |
